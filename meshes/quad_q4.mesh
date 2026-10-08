@@ -1,0 +1,18 @@
+# Placa 2 x 1 m con 2 cuadrilateros Q4 (4 nodos por elemento)
+# n_nodes n_elements n_materials dim
+6 2 1 2
+
+# node_number x y
+1 0.0 0.0
+2 1.0 0.0
+3 2.0 0.0
+4 0.0 1.0
+5 1.0 1.0
+6 2.0 1.0
+
+# material_id type E nu rho thickness
+1 LINEAR_ELASTIC 21.0e9 0.25 2400.0 1.0
+
+# element_number family order material_id connectivity
+1 QUAD 1 1 1 2 5 4
+2 QUAD 1 1 2 3 6 5
