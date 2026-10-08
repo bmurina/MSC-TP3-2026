@@ -8,6 +8,7 @@ Solver bidimensional por Elementos Finitos (FEM) en **Python** para análisis el
 
 ## Integrantes
 - Bruno Murina (`bmurina@itba.edu.ar`)
+- Juan Manuel Rodriguez Spagnol (`[jrodriguezspagnol@itba.edu.ar]`)
 
 ---
 
