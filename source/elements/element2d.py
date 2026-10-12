@@ -2,7 +2,7 @@ import numpy
 
 
 class Element2D:
-    """Clase base para elementos planos (estado plano de tension).
+    """Clase base para elementos planos (deformacion o tension plana).
 
     Mantiene la misma interfaz que Bar2D (global_dofs, stiffness_matrix, ...)
     para poder usar DenseMatrix.scatter_local_to_global sin cambios.
@@ -40,8 +40,8 @@ class Element2D:
             self.coords[i, 0] = node.x
             self.coords[i, 1] = node.y
 
-        # Matriz constitutiva de tension plana
-        self.D = material.plane_stress_matrix()
+        # Matriz constitutiva (deformacion o tension plana segun el material)
+        self.D = material.constitutive_matrix()
 
         # Matriz de rigidez y area del elemento (integracion de Gauss)
         self.area = 0.0
@@ -154,31 +154,56 @@ class Element2D:
         """Tension [sigma_xx, sigma_yy, tau_xy] en el punto (xi, eta)."""
         return self.D @ self.strain(u, xi, eta)
 
+    def out_of_plane_stress(self, u, xi, eta):
+        """Tension normal al plano sigma_zz en el punto (xi, eta).
+
+        No nula en deformacion plana: sigma_zz = nu (sigma_xx + sigma_yy).
+        """
+        return self.material.out_of_plane_stress(self.stress(u, xi, eta))
+
+    def full_stress(self, u, xi, eta):
+        """Tension [sigma_xx, sigma_yy, tau_xy, sigma_zz] en el punto (xi, eta)."""
+        sigma = self.stress(u, xi, eta)
+        return numpy.append(sigma, self.material.out_of_plane_stress(sigma))
+
     def stress_at_nodes(self, u):
-        """Tensiones evaluadas en los nodos del elemento: matriz (n, 3)."""
-        sigma = numpy.zeros((self.number_of_nodes, 3))
+        """Tensiones [sxx, syy, txy, szz] en los nodos del elemento: matriz (n, 4)."""
+        sigma = numpy.zeros((self.number_of_nodes, 4))
 
         for i in range(self.number_of_nodes):
             xi, eta = self.natural_coordinates[i]
-            sigma[i] = self.stress(u, xi, eta)
+            sigma[i] = self.full_stress(u, xi, eta)
 
         return sigma
 
     def stress_at_centroid(self, u):
-        """Tension promedio del elemento (promedio ponderado en puntos de Gauss)."""
-        sigma = numpy.zeros(3)
+        """Tension promedio [sxx, syy, txy, szz] del elemento (promedio
+        ponderado en puntos de Gauss)."""
+        sigma = numpy.zeros(4)
         total = 0.0
 
         for xi, eta, weight in self.gauss_points:
             B, N, detJ = self.B_matrix(xi, eta)
-            sigma += self.stress(u, xi, eta) * detJ * weight
+            sigma += self.full_stress(u, xi, eta) * detJ * weight
             total += detJ * weight
 
         return sigma / total
 
     @staticmethod
     def principal_stresses(sigma):
-        """Tensiones principales (sigma_1 >= sigma_2) de [sxx, syy, txy]."""
+        """Tensiones principales en el plano (s_1 >= s_2) de [sxx, syy, txy]."""
         mean = 0.5 * (sigma[0] + sigma[1])
         radius = numpy.sqrt((0.5 * (sigma[0] - sigma[1])) ** 2 + sigma[2] ** 2)
         return mean + radius, mean - radius
+
+    @staticmethod
+    def principal_stresses_3d(sigma):
+        """Tensiones principales 3D (sigma_1 >= sigma_2 >= sigma_3) de
+        [sxx, syy, txy, szz].
+
+        Como tau_xz = tau_yz = 0, sigma_zz es en si misma una direccion
+        principal; las otras dos son las principales en el plano.
+        """
+        s_a, s_b = Element2D.principal_stresses(sigma)
+        s = sorted([s_a, s_b, sigma[3]], reverse=True)
+        return s[0], s[1], s[2]

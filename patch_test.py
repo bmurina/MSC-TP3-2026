@@ -1,6 +1,6 @@
 """patch_test.py
 --------------
-Patch test lineal para elementos 2D de estado plano de tension.
+Patch test lineal para elementos 2D planos (deformacion o tension plana).
 
 El patch test verifica que el elemento reproduce exactamente un campo de
 deformaciones constante. Se impone el campo:
@@ -82,9 +82,11 @@ def exact_strains(params=PATCH_PARAMS):
 
 
 def exact_stresses(material, params=PATCH_PARAMS):
-    """Tensiones exactas constantes: sigma = D @ eps_exact."""
+    """Tensiones exactas constantes [sxx, syy, txy, szz]: sigma = D @ eps_exact
+    y sigma_zz segun la hipotesis plana del material."""
     eps = exact_strains(params)
-    return material.plane_stress_matrix() @ eps
+    sigma = material.constitutive_matrix() @ eps
+    return np.append(sigma, material.out_of_plane_stress(sigma))
 
 
 def get_boundary_nodes(mesh, tol=1e-8):
@@ -215,10 +217,11 @@ def run_patch_test(element_type, verbose=True):
     max_stress_error = 0.0
 
     if verbose:
-        print("  Tensiones exactas: sigma_xx=%.4f Pa | sigma_yy=%.4f Pa | tau_xy=%.4f Pa" % tuple(sigma_exact))
+        print("  Estado plano: %s" % mat.plane_state)
+        print("  Tensiones exactas: sigma_xx=%.4f Pa | sigma_yy=%.4f Pa | tau_xy=%.4f Pa | sigma_zz=%.4f Pa" % tuple(sigma_exact))
         print()
-        print("  %6s  %14s  %14s  %14s  %10s  %10s  %10s" % (
-            "Elem", "sigma_xx", "sigma_yy", "tau_xy", "err_xx", "err_yy", "err_xy"))
+        print("  %6s  %14s  %14s  %14s  %14s  %10s  %10s  %10s  %10s" % (
+            "Elem", "sigma_xx", "sigma_yy", "tau_xy", "sigma_zz", "err_xx", "err_yy", "err_xy", "err_zz"))
 
     for elem in elements:
         sigma_fem = elem.stress_at_centroid(u_sol)
@@ -227,10 +230,10 @@ def run_patch_test(element_type, verbose=True):
         max_stress_error = max(max_stress_error, max_err)
 
         if verbose:
-            print("  %6d  %14.4f  %14.4f  %14.4f  %10.2e  %10.2e  %10.2e" % (
+            print("  %6d  %14.4f  %14.4f  %14.4f  %14.4f  %10.2e  %10.2e  %10.2e  %10.2e" % (
                 elem.global_id + 1,
-                sigma_fem[0], sigma_fem[1], sigma_fem[2],
-                err[0], err[1], err[2],
+                sigma_fem[0], sigma_fem[1], sigma_fem[2], sigma_fem[3],
+                err[0], err[1], err[2], err[3],
             ))
 
     # 7. Veredicto

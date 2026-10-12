@@ -1,5 +1,5 @@
 from source.mesh.node import Node
-from source.materials.linear_elastic import LinearElastic
+from source.materials.linear_elastic import LinearElastic, PLANE_STRAIN
 
 
 class Mesh:
@@ -9,10 +9,11 @@ class Mesh:
 
         n_nodes n_elements n_materials dim
         id x y                                    (n_nodes lineas)
-        id LINEAR_ELASTIC E nu rho thickness      (n_materials lineas)
+        id LINEAR_ELASTIC E nu rho thickness [state] (n_materials lineas)
         id family order material_id n1 n2 ...     (n_elements lineas)
 
     family: TRI o QUAD.  order: 1 (lineal) o 2 (cuadratico).
+    state (opcional): PLANE_STRAIN (por defecto) o PLANE_STRESS.
     Todos los ids del archivo empiezan en 1; internamente se usan desde 0.
     """
 
@@ -63,7 +64,7 @@ class Mesh:
 
             self.nodes.append(Node(global_id, float(values[1]), float(values[2])))
 
-        # Materiales: id tipo E nu rho espesor
+        # Materiales: id tipo E nu rho espesor [estado plano]
         for i in range(n_materials):
             values = lines[line_number].split()
             line_number = line_number + 1
@@ -73,8 +74,11 @@ class Mesh:
             if values[1] != "LINEAR_ELASTIC":
                 raise ValueError("Unknown material type: " + values[1])
 
+            plane_state = values[6] if len(values) > 6 else PLANE_STRAIN
+
             self.materials[material_id] = LinearElastic(
-                float(values[2]), float(values[3]), float(values[4])
+                float(values[2]), float(values[3]), float(values[4]),
+                plane_state,
             )
             self.thicknesses[material_id] = float(values[5])
 

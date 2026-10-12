@@ -161,9 +161,24 @@ def run_dam_analysis(
         u_mag[max_idx] * 1000.0, max_node.global_id + 1, max_node.x, max_node.y
     ))
     print("  ux = %.4f mm, uy = %.4f mm" % (u_x[max_idx] * 1000.0, u_y[max_idx] * 1000.0))
+
+    # 8. Tensiones por elemento (promedio en puntos de Gauss)
+    # sigma_zz != 0 en deformacion plana (laderas impiden el desplazamiento en z)
+    sigma = np.array([element.stress_at_centroid(u) for element in elements])
+    sigma_1 = np.array([elements[0].principal_stresses_3d(s)[0] for s in sigma])
+
+    print("\n--- TENSIONES POR ELEMENTO [MPa] (estado: %s) ---" % elements[0].material.plane_state)
+    for label, values in (
+        ("sigma_xx", sigma[:, 0]),
+        ("sigma_yy", sigma[:, 1]),
+        ("tau_xy", sigma[:, 2]),
+        ("sigma_zz", sigma[:, 3]),
+        ("sigma_1 (3D)", sigma_1),
+    ):
+        print("%-13s min = %9.4f   max = %9.4f" % (label, values.min() / 1e6, values.max() / 1e6))
     print("=" * 70)
 
-    # 8. Visualizacion de configuracion deformada
+    # 9. Visualizacion de configuracion deformada
     if plot:
         base_name = os.path.splitext(os.path.basename(mesh_file))[0]
         save_file = os.path.join("results", "deformada_%s.png" % base_name)
