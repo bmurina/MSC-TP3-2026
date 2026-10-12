@@ -15,13 +15,15 @@ con deformaciones exactas constantes:
 Se aplican los desplazamientos exactos como condicion de Dirichlet en TODOS
 los nodos del contorno exterior. Se verifica que:
   1. Los desplazamientos interiores coinciden con los exactos (error < tol).
-  2. Las tensiones en TODOS los elementos son constantes e iguales a las exactas.
+  2. Las tensiones en TODOS los puntos de Gauss de TODOS los elementos son
+     iguales a las exactas.
 
-Elementos disponibles:
-    CST  -> meshes/tri_cst.mesh
-    LST  -> meshes/tri_lst.mesh
-    Q4   -> meshes/quad_q4.mesh
-    Q8   -> meshes/quad_q8.mesh
+Se usan las mallas de la presa, que tienen elementos distorsionados y nodos
+interiores libres:
+    CST  -> meshes/presa_cst_strain.mesh
+    LST  -> meshes/presa_lst_strain.mesh
+    Q4   -> meshes/presa_q4_strain.mesh
+    Q8   -> meshes/presa_q8_strain.mesh
 
 Uso:
     python patch_test.py          # pide el tipo de elemento interactivamente
@@ -53,10 +55,18 @@ PATCH_PARAMS = {
 }
 
 MESH_MAP = {
-    "CST": "meshes/tri_cst.mesh",
-    "LST": "meshes/tri_lst.mesh",
-    "Q4":  "meshes/quad_q4.mesh",
-    "Q8":  "meshes/quad_q8.mesh",
+    "CST": "meshes/presa_cst_strain.mesh",
+    "LST": "meshes/presa_lst_strain.mesh",
+    "Q4":  "meshes/presa_q4_strain.mesh",
+    "Q8":  "meshes/presa_q8_strain.mesh",
+}
+
+# Aristas de cada tipo de elemento en indices locales: (vertice, [medio], vertice)
+ELEMENT_EDGES = {
+    ("TRI", 1):  [(0, 1), (1, 2), (2, 0)],
+    ("TRI", 2):  [(0, 3, 1), (1, 4, 2), (2, 5, 0)],
+    ("QUAD", 1): [(0, 1), (1, 2), (2, 3), (3, 0)],
+    ("QUAD", 2): [(0, 4, 1), (1, 5, 2), (2, 6, 3), (3, 7, 0)],
 }
 
 TOL_DISP = 1e-10   # tolerancia en desplazamientos [m]
@@ -89,27 +99,30 @@ def exact_stresses(material, params=PATCH_PARAMS):
     return np.append(sigma, material.out_of_plane_stress(sigma))
 
 
-def get_boundary_nodes(mesh, tol=1e-8):
+def get_boundary_nodes(mesh):
     """Devuelve el conjunto de IDs de nodos sobre el contorno exterior de la malla.
 
-    Para el patch test se usan mallas rectangulares alineadas con los ejes.
-    Se detecta el borde como los nodos que tienen coordenada minima o maxima en x o y.
+    Deteccion topologica, valida para cualquier geometria: una arista es de
+    borde si pertenece a un unico elemento. Sus nodos (vertices y, en
+    elementos cuadraticos, el nodo medio) son nodos de contorno.
     """
-    xs = [n.x for n in mesh.nodes]
-    ys = [n.y for n in mesh.nodes]
-    x_min, x_max = min(xs), max(xs)
-    y_min, y_max = min(ys), max(ys)
+    edge_count = {}
+    edge_nodes = {}
+
+    for e in range(mesh.number_of_elements()):
+        conn = mesh.connectivity[e]
+        key = (mesh.element_types[e], mesh.element_orders[e])
+
+        for local_edge in ELEMENT_EDGES[key]:
+            nodes = [conn[i] for i in local_edge]
+            edge = frozenset((nodes[0], nodes[-1]))
+            edge_count[edge] = edge_count.get(edge, 0) + 1
+            edge_nodes[edge] = nodes
 
     boundary = set()
-    for n in mesh.nodes:
-        on_boundary = (
-            abs(n.x - x_min) < tol or
-            abs(n.x - x_max) < tol or
-            abs(n.y - y_min) < tol or
-            abs(n.y - y_max) < tol
-        )
-        if on_boundary:
-            boundary.add(n.global_id)
+    for edge, count in edge_count.items():
+        if count == 1:
+            boundary.update(edge_nodes[edge])
     return boundary
 
 
@@ -224,10 +237,12 @@ def run_patch_test(element_type, verbose=True):
             "Elem", "sigma_xx", "sigma_yy", "tau_xy", "sigma_zz", "err_xx", "err_yy", "err_xy", "err_zz"))
 
     for elem in elements:
+        # Peor error entre todos los puntos de Gauss del elemento
+        err = np.zeros(4)
+        for xi, eta, weight in elem.gauss_points:
+            err = np.maximum(err, np.abs(elem.full_stress(u_sol, xi, eta) - sigma_exact))
         sigma_fem = elem.stress_at_centroid(u_sol)
-        err = np.abs(sigma_fem - sigma_exact)
-        max_err = np.max(err)
-        max_stress_error = max(max_stress_error, max_err)
+        max_stress_error = max(max_stress_error, np.max(err))
 
         if verbose:
             print("  %6d  %14.4f  %14.4f  %14.4f  %14.4f  %10.2e  %10.2e  %10.2e  %10.2e" % (

@@ -165,8 +165,8 @@
 160 4.0000000000 28.0000000000
 161 18.0000000000 -0.0000000000
 
-# material_id type E[Pa] nu rho[kg/m3] thickness[m]
-1 LINEAR_ELASTIC 2.100000e+10 0.200000 2400.0000 1.000000
+# material_id type E[Pa] nu rho[kg/m3] thickness[m] state
+1 LINEAR_ELASTIC 2.100000e+10 0.200000 2400.0000 1.000000 PLANE_STRAIN
 
 # element_id family order material_id connectivity(1-indexed)
 1 TRI 2 1 159 126 101 128 1 2
