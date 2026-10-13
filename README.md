@@ -1,8 +1,8 @@
-# MSC - Trabajo Práctico N°3: Estado Plano de Tensión
+# MSC - Trabajo Práctico N°3: Estado Plano de Deformación
 
 **Mecánica de Sólidos Computacional (30.53) - ITBA**
 
-Solver bidimensional por Elementos Finitos (FEM) en **Python** para análisis elástico lineal en estado plano de tensión. Aplicación al análisis estructural y de estabilidad de una presa de gravedad de hormigón.
+Solver bidimensional por Elementos Finitos (FEM) en **Python** para análisis elástico lineal en estado plano de deformación. Aplicación al análisis estructural y de estabilidad de una presa de gravedad de hormigón.
 
 ---
 
@@ -34,7 +34,7 @@ Solver bidimensional por Elementos Finitos (FEM) en **Python** para análisis el
 MSC-TP3-2026/
 ├── source/
 │   ├── elements/      # CST, LST, Q4, Q8
-│   ├── materials/     # Material elástico lineal (tensión plana)
+│   ├── materials/     # Material elástico lineal (deformación plana)
 │   ├── mesh/          # Clases Mesh, Node y parser .mesh
 │   ├── output/        # Visualización en deformada y exportación VTU
 │   ├── solvers/       # Solvers del sistema de ecuaciones (K u = f)
