@@ -25,6 +25,7 @@ from source.elements.factory import build_elements
 from source.systems.system import System
 from source.solvers.linear_solver import LinearSolver
 from source.output.plotter import plot_deformed_mesh, plot_principal_stress
+from source.output.vtk_writer import write_vtu
 
 
 ELEMENT_MESHES = {
@@ -123,6 +124,7 @@ def run_dam_analysis(
     kn=DEFAULT_KN,
     kt_ratio=KT_RATIO,
     sigma1_vlim=None,
+    export_vtu=True,
 ):
     """Analisis estatico lineal de la presa.
 
@@ -242,17 +244,27 @@ def run_dam_analysis(
         print("%-13s min = %9.4f   max = %9.4f" % (label, values.min() / 1e6, values.max() / 1e6))
     print("=" * 70)
 
-    # 9. Visualizacion: deformada y sigma_1 sobre la deformada
+    base_name = os.path.splitext(os.path.basename(mesh_file))[0]
+    if base == "fixed":
+        base_label = "base empotrada"
+        suffix = ""
+    else:
+        kn_str = ("%.0e" % kn).replace("+0", "").replace("+", "")   # 1e+09 -> 1e9
+        base_label = "base Robin $k_n$=%s N/m$^3$" % kn_str
+        suffix = "_robin_kn%s" % kn_str
+
+    # 9. Exportacion a VTU para ParaView (original + deformada amplificada)
+    if export_vtu:
+        vtu_path = os.path.join("results", "vtu", "%s%s.vtu" % (base_name, suffix))
+        vtu_def_path = os.path.join("results", "vtu", "%s%s_deformada.vtu" % (base_name, suffix))
+        write_vtu(vtu_path, mesh, elements, u, scale_factor=0.0)
+        write_vtu(vtu_def_path, mesh, elements, u, scale_factor=scale_factor)
+        print("VTU guardado en: %s" % vtu_path)
+        print("VTU deformada (x%g) guardado en: %s" % (scale_factor, vtu_def_path))
+
+    # 10. Visualizacion: deformada y sigma_1 sobre la deformada
     if plot:
-        base_name = os.path.splitext(os.path.basename(mesh_file))[0]
         element_label = "%s orden %d" % (mesh.element_types[0], mesh.element_orders[0])
-        if base == "fixed":
-            base_label = "base empotrada"
-            suffix = ""
-        else:
-            kn_str = ("%.0e" % kn).replace("+0", "").replace("+", "")   # 1e+09 -> 1e9
-            base_label = "base Robin $k_n$=%s N/m$^3$" % kn_str
-            suffix = "_robin_kn%s" % kn_str
 
         title = "Configuracion Deformada - Presa de Gravedad (%s, %s)\nEscala: %g$\\times$ | Disp. max: %.4f mm" % (
             element_label, base_label, scale_factor, u_mag[max_idx] * 1000.0
