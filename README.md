@@ -2,7 +2,7 @@
 
 **Mecánica de Sólidos Computacional (30.53) - ITBA**
 
-Solver bidimensional por Elementos Finitos (FEM) en **Python** para análisis elástico lineal en estado plano de deformación. Aplicación al análisis estructural y de estabilidad de una presa de gravedad de hormigón.
+Solver bidimensional por Elementos Finitos (FEM) en **Python** para análisis elástico lineal en estado plano de deformación ($\varepsilon_{zz}=0$, $\sigma_{zz}=\nu(\sigma_{xx}+\sigma_{yy})$). Aplicación al análisis estructural y de estabilidad de una presa de gravedad de hormigón.
 
 ---
 
@@ -25,7 +25,7 @@ Solver bidimensional por Elementos Finitos (FEM) en **Python** para análisis el
    - Verificación de equilibrio estático de momentos (estabilizante vs desestabilizante vs reacciones FEM en la base).
    - Factores de seguridad al vuelco y deslizamiento.
    - Estudio de optimizaciones geométricas.
-   - Condiciones de borde elásticas de Robin en la base.
+   - Condiciones de borde elásticas de Robin en la base (resortes de Winkler, $k_t = 0{,}4\,k_n$).
 
 ---
 
@@ -41,7 +41,9 @@ MSC-TP3-2026/
 │   └── systems/       # Ensamblador global, cargas y condiciones de borde
 ├── meshes/            # Archivos .mesh de prueba, patch test y de la presa
 ├── results/           # Archivos de resultados .vtu para ParaView
-├── tests/             # Validación del Patch Test
+├── tests/             # Equilibrio de la presa (empotrada y Robin)
+├── patch_test.py      # Patch test de CST, LST, Q4 y Q8
+├── robin_analysis.py  # Bonus: barrido de kn con CB de Robin en la base
 ├── requirements.txt   # Dependencias de Python
 └── main.py            # Script principal de ejecución
 ```
@@ -69,3 +71,21 @@ MSC-TP3-2026/
    ```bash
    pip install -r requirements.txt
    ```
+
+---
+
+## Uso
+
+```bash
+python main.py                       # interactivo (elemento, escala y condición de base)
+python main.py Q8 2000               # base empotrada
+python main.py Q8 2000 robin 1e9     # base sobre resortes de Winkler, kn = 1e9 N/m3
+python main.py ALL 2000              # los cuatro elementos (guarda figuras sin mostrarlas)
+python robin_analysis.py Q8          # bonus: empotrada vs. Robin (kn = 1e8 ... 1e11) vs. Navier
+python patch_test.py all             # patch test de los cuatro elementos
+python tests/test_presa_equilibrium.py
+```
+
+Cada corrida de `main.py` guarda en `results/` la deformada coloreada por $|u|$
+(`deformada_*.png`) y la tensión principal máxima $\sigma_1$ 3D sobre la deformada
+(`sigma1_*.png`). `robin_analysis.py` agrega `robin_base_syy_*.png` con $\sigma_{yy}$ en la base.

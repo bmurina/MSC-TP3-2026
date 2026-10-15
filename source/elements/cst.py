@@ -16,6 +16,10 @@ class CST(Element2D):
     """
 
     number_of_nodes = 3
+    family = "TRI"
+
+    # Aristas en indices locales: (vertice, vertice)
+    edges = [(0, 1), (1, 2), (2, 0)]
 
     # Coordenadas naturales (xi, eta) de cada nodo
     natural_coordinates = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]

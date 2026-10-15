@@ -29,6 +29,10 @@ class Q8(Element2D):
     """
 
     number_of_nodes = 8
+    family = "QUAD"
+
+    # Aristas en indices locales: (vertice, medio, vertice)
+    edges = [(0, 4, 1), (1, 5, 2), (2, 6, 3), (3, 7, 0)]
 
     natural_coordinates = [
         (-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0),

@@ -19,6 +19,10 @@ class LST(Element2D):
     """
 
     number_of_nodes = 6
+    family = "TRI"
+
+    # Aristas en indices locales: (vertice, medio, vertice)
+    edges = [(0, 3, 1), (1, 4, 2), (2, 5, 0)]
 
     natural_coordinates = [
         (0.0, 0.0), (1.0, 0.0), (0.0, 1.0),

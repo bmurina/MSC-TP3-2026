@@ -1,6 +1,6 @@
 """patch_test.py
 --------------
-Patch test lineal para elementos 2D planos (deformacion o tension plana).
+Patch test lineal para elementos 2D en estado plano de deformacion.
 
 El patch test verifica que el elemento reproduce exactamente un campo de
 deformaciones constante. Se impone el campo:
@@ -35,7 +35,7 @@ import sys
 import numpy as np
 
 from source.mesh.mesh import Mesh
-from source.elements.factory import build_elements
+from source.elements.factory import build_elements, ELEMENT_CLASSES
 from source.systems.matrix import DenseMatrix
 from source.systems.boundary_conditions import BoundaryConditions
 from source.solvers.linear_solver import LinearSolver
@@ -59,14 +59,6 @@ MESH_MAP = {
     "LST": "meshes/presa_lst_strain.mesh",
     "Q4":  "meshes/presa_q4_strain.mesh",
     "Q8":  "meshes/presa_q8_strain.mesh",
-}
-
-# Aristas de cada tipo de elemento en indices locales: (vertice, [medio], vertice)
-ELEMENT_EDGES = {
-    ("TRI", 1):  [(0, 1), (1, 2), (2, 0)],
-    ("TRI", 2):  [(0, 3, 1), (1, 4, 2), (2, 5, 0)],
-    ("QUAD", 1): [(0, 1), (1, 2), (2, 3), (3, 0)],
-    ("QUAD", 2): [(0, 4, 1), (1, 5, 2), (2, 6, 3), (3, 7, 0)],
 }
 
 TOL_DISP = 1e-10   # tolerancia en desplazamientos [m]
@@ -93,7 +85,7 @@ def exact_strains(params=PATCH_PARAMS):
 
 def exact_stresses(material, params=PATCH_PARAMS):
     """Tensiones exactas constantes [sxx, syy, txy, szz]: sigma = D @ eps_exact
-    y sigma_zz segun la hipotesis plana del material."""
+    y sigma_zz = nu (sxx + syy) por deformacion plana."""
     eps = exact_strains(params)
     sigma = material.constitutive_matrix() @ eps
     return np.append(sigma, material.out_of_plane_stress(sigma))
@@ -113,7 +105,7 @@ def get_boundary_nodes(mesh):
         conn = mesh.connectivity[e]
         key = (mesh.element_types[e], mesh.element_orders[e])
 
-        for local_edge in ELEMENT_EDGES[key]:
+        for local_edge in ELEMENT_CLASSES[key].edges:
             nodes = [conn[i] for i in local_edge]
             edge = frozenset((nodes[0], nodes[-1]))
             edge_count[edge] = edge_count.get(edge, 0) + 1
@@ -230,7 +222,7 @@ def run_patch_test(element_type, verbose=True):
     max_stress_error = 0.0
 
     if verbose:
-        print("  Estado plano: %s" % mat.plane_state)
+        print("  Estado plano: deformacion plana")
         print("  Tensiones exactas: sigma_xx=%.4f Pa | sigma_yy=%.4f Pa | tau_xy=%.4f Pa | sigma_zz=%.4f Pa" % tuple(sigma_exact))
         print()
         print("  %6s  %14s  %14s  %14s  %14s  %10s  %10s  %10s  %10s" % (

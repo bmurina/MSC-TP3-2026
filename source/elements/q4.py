@@ -18,6 +18,10 @@ class Q4(Element2D):
     """
 
     number_of_nodes = 4
+    family = "QUAD"
+
+    # Aristas en indices locales: (vertice, vertice)
+    edges = [(0, 1), (1, 2), (2, 3), (3, 0)]
 
     # Coordenadas naturales de los nodos
     natural_coordinates = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]

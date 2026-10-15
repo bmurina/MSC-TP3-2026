@@ -9,15 +9,16 @@ from source.systems.system import System
 from source.solvers.linear_solver import LinearSolver
 
 
-def test_presa_equilibrium():
-    meshes = [
-        "meshes/presa_cst_strain.mesh",
-        "meshes/presa_lst_strain.mesh",
-        "meshes/presa_q4_strain.mesh",
-        "meshes/presa_q8_strain.mesh",
-    ]
+MESHES = [
+    "meshes/presa_cst_strain.mesh",
+    "meshes/presa_lst_strain.mesh",
+    "meshes/presa_q4_strain.mesh",
+    "meshes/presa_q8_strain.mesh",
+]
 
-    for mesh_path in meshes:
+
+def test_presa_equilibrium():
+    for mesh_path in MESHES:
         mesh = Mesh()
         mesh.read(mesh_path)
         elems = build_elements(mesh)
@@ -66,5 +67,51 @@ def test_presa_equilibrium():
         assert eq_y < 1e-4, "Error de equilibrio en Y"
 
 
+
+def _solve_presa(mesh_path, base, kn=None, kt_ratio=0.4):
+    mesh = Mesh()
+    mesh.read(mesh_path)
+    fem_sys = System(mesh, build_elements(mesh))
+    fem_sys.assemble_stiffness()
+    fem_sys.apply_hydrostatic_pressure(water_height=28.0, rho_water=1000.0, gravity=9.81)
+    fem_sys.apply_gravity(gravity=9.81)
+
+    if base == "fixed":
+        fem_sys.fix_base(y_val=0.0)
+    else:
+        info = fem_sys.apply_robin_base(kn=kn, kt=kt_ratio * kn, y_val=0.0)
+        assert abs(info["length"] - 18.0) < 1e-9, "Longitud de base integrada incorrecta"
+
+    fem_sys.solve(solver_func=LinearSolver.solve)
+    return fem_sys
+
+
+def test_presa_robin_equilibrium():
+    """Con resortes en la base, las fuerzas de la fundacion equilibran las cargas."""
+    for mesh_path in MESHES:
+        fem_sys = _solve_presa(mesh_path, "robin", kn=1.0e9)
+        base_info = fem_sys.get_base_reactions(y_val=0.0)
+
+        eq_x = abs(np.sum(fem_sys.F[0::2]) + base_info["total_Rx"])
+        eq_y = abs(np.sum(fem_sys.F[1::2]) + base_info["total_Ry"])
+
+        print("%s | Robin kn=1e9 | residual X: %.3e N | residual Y: %.3e N" % (mesh_path, eq_x, eq_y))
+        assert eq_x < 1e-4, "Error de equilibrio en X (Robin)"
+        assert eq_y < 1e-4, "Error de equilibrio en Y (Robin)"
+
+
+def test_robin_stiff_limit():
+    """Con kn muy grande la solucion de Robin tiende a la empotrada."""
+    for mesh_path in MESHES:
+        u_fixed = _solve_presa(mesh_path, "fixed").u
+        u_robin = _solve_presa(mesh_path, "robin", kn=1.0e14).u
+
+        rel_err = np.linalg.norm(u_robin - u_fixed) / np.linalg.norm(u_fixed)
+        print("%s | Robin kn=1e14 vs empotrada: error relativo %.3e" % (mesh_path, rel_err))
+        assert rel_err < 1e-2, "Robin rigido no converge al empotramiento"
+
+
 if __name__ == "__main__":
     test_presa_equilibrium()
+    test_presa_robin_equilibrium()
+    test_robin_stiff_limit()

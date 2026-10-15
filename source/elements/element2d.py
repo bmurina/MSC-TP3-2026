@@ -2,13 +2,15 @@ import numpy
 
 
 class Element2D:
-    """Clase base para elementos planos (deformacion o tension plana).
+    """Clase base para elementos planos en estado plano de deformacion.
 
     Mantiene la misma interfaz que Bar2D (global_dofs, stiffness_matrix, ...)
     para poder usar DenseMatrix.scatter_local_to_global sin cambios.
 
     Cada elemento concreto (CST, LST, Q4, Q8) solo define:
       - number_of_nodes
+      - family: "TRI" (referencia (0,0),(1,0),(0,1)) o "QUAD" ([-1, 1]^2)
+      - edges: aristas en indices locales (vertice, [medio], vertice)
       - natural_coordinates: coordenadas (xi, eta) de sus nodos
       - gauss_points: lista de (xi, eta, peso) para integrar
       - shape_functions(xi, eta): devuelve N (n,) y dN (2, n) respecto a (xi, eta)
@@ -16,6 +18,8 @@ class Element2D:
 
     dofs_per_node = 2
     number_of_nodes = 0
+    family = None
+    edges = []
     natural_coordinates = []
     gauss_points = []
 
@@ -40,7 +44,7 @@ class Element2D:
             self.coords[i, 0] = node.x
             self.coords[i, 1] = node.y
 
-        # Matriz constitutiva (deformacion o tension plana segun el material)
+        # Matriz constitutiva de deformacion plana
         self.D = material.constitutive_matrix()
 
         # Matriz de rigidez y area del elemento (integracion de Gauss)
@@ -157,7 +161,8 @@ class Element2D:
     def out_of_plane_stress(self, u, xi, eta):
         """Tension normal al plano sigma_zz en el punto (xi, eta).
 
-        No nula en deformacion plana: sigma_zz = nu (sigma_xx + sigma_yy).
+        No nula por la hipotesis de deformacion plana:
+        sigma_zz = nu (sigma_xx + sigma_yy).
         """
         return self.material.out_of_plane_stress(self.stress(u, xi, eta))
 
@@ -207,3 +212,60 @@ class Element2D:
         s_a, s_b = Element2D.principal_stresses(sigma)
         s = sorted([s_a, s_b, sigma[3]], reverse=True)
         return s[0], s[1], s[2]
+
+    def max_principal_stress(self, u, xi, eta):
+        """Tension principal maxima 3D sigma_1 en el punto (xi, eta)."""
+        return self.principal_stresses_3d(self.full_stress(u, xi, eta))[0]
+
+    # ------------------------------------------------------------------
+    # Visualizacion
+    # ------------------------------------------------------------------
+    def sample_grid(self, n):
+        """Subdivision del elemento de referencia para graficar campos.
+
+        Devuelve los puntos naturales (m, 2) y los sub-triangulos (k, 3)
+        en indices de esos puntos. TRI: n divisiones por lado sobre el
+        triangulo unitario. QUAD: grilla (n+1) x (n+1) en [-1, 1]^2, cada
+        celda partida en dos triangulos.
+        """
+        points = []
+        triangles = []
+
+        if self.family == "TRI":
+            index = {}
+            for j in range(n + 1):
+                for i in range(n + 1 - j):
+                    index[(i, j)] = len(points)
+                    points.append((i / n, j / n))
+
+            for j in range(n):
+                for i in range(n - j):
+                    triangles.append((index[(i, j)], index[(i + 1, j)], index[(i, j + 1)]))
+                    if i + j < n - 1:
+                        triangles.append((index[(i + 1, j)], index[(i + 1, j + 1)], index[(i, j + 1)]))
+
+        elif self.family == "QUAD":
+            for j in range(n + 1):
+                for i in range(n + 1):
+                    points.append((-1.0 + 2.0 * i / n, -1.0 + 2.0 * j / n))
+
+            for j in range(n):
+                for i in range(n):
+                    a = j * (n + 1) + i
+                    b = a + 1
+                    c = a + n + 2
+                    d = a + n + 1
+                    triangles.append((a, b, c))
+                    triangles.append((a, c, d))
+
+        else:
+            raise ValueError("Unknown element family: %s" % self.family)
+
+        return numpy.array(points), numpy.array(triangles, dtype=int)
+
+    def deformed_position(self, u, xi, eta, scale_factor=1.0):
+        """Posicion (x, y) del punto (xi, eta) en la configuracion deformada
+        amplificada: x = N @ (coords + scale * u_e)."""
+        N, dN = self.shape_functions(xi, eta)
+        ue = self.element_displacements(u).reshape(-1, 2)
+        return N @ (self.coords + scale_factor * ue)

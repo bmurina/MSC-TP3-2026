@@ -1,11 +1,19 @@
 """main.py
 -------
 Script principal de ejecucion del analisis estatico de la presa de gravedad.
-Modela el comportamiento mecanico 2D bajo peso propio y empuje hidroestatico
-con condiciones de apoyo fijo en la base (y=0).
+Modela el comportamiento mecanico 2D (deformacion plana) bajo peso propio y
+empuje hidroestatico. La base (y=0) puede estar empotrada (Dirichlet) o
+apoyada sobre una fundacion elastica de Winkler (condicion de Robin).
 
 Permite seleccionar interactivamente el tipo de elemento (CST, LST, Q4, Q8),
-resolver el sistema y visualizar la configuracion deformada amplificada.
+resolver el sistema y visualizar la configuracion deformada amplificada y la
+tension principal maxima sigma_1 sobre la deformada.
+
+Uso:
+    python main.py                       # interactivo
+    python main.py Q8 5000               # base empotrada
+    python main.py Q8 5000 robin 1e9     # base sobre resortes, kn = 1e9 N/m3
+    python main.py ALL 2000              # los cuatro elementos, sin mostrar figuras
 """
 
 import sys
@@ -16,7 +24,7 @@ from source.mesh.mesh import Mesh
 from source.elements.factory import build_elements
 from source.systems.system import System
 from source.solvers.linear_solver import LinearSolver
-from source.output.plotter import plot_deformed_mesh
+from source.output.plotter import plot_deformed_mesh, plot_principal_stress
 
 
 ELEMENT_MESHES = {
@@ -25,6 +33,10 @@ ELEMENT_MESHES = {
     "Q4":  "meshes/presa_q4_strain.mesh",
     "Q8":  "meshes/presa_q8_strain.mesh",
 }
+
+# Condicion de Robin: modulo de balasto tangencial kt = KT_RATIO * kn
+DEFAULT_KN = 1.0e10     # [N/m3]
+KT_RATIO = 0.4
 
 
 def ask_element_choice():
@@ -72,14 +84,54 @@ def ask_scale_factor():
             print("Entrada invalida. Ingrese un numero decimal o entero.")
 
 
+def ask_base_condition():
+    """Pregunta la condicion de borde de la base: empotrada o Robin (kn)."""
+    print("\nCondicion de borde en la base (y=0):")
+    print("  [1] Empotrada (ux = uy = 0)")
+    print("  [2] Robin: fundacion elastica de Winkler (kt = %g kn)" % KT_RATIO)
+
+    while True:
+        raw = input("Seleccione una opcion [default: 1]: ").strip()
+        if raw in ("", "1"):
+            return "fixed", DEFAULT_KN
+        if raw == "2":
+            break
+        print("Opcion invalida. Intente de nuevo.")
+
+    while True:
+        raw = input("Modulo de balasto normal kn [N/m3] [default: %g]: " % DEFAULT_KN).strip()
+        if raw == "":
+            return "robin", DEFAULT_KN
+        try:
+            val = float(raw)
+            if val > 0:
+                return "robin", val
+            print("kn debe ser positivo.")
+        except ValueError:
+            print("Entrada invalida.")
+
+
 def run_dam_analysis(
     mesh_file=None,
     water_height=28.0,
     gravity=9.81,
     scale_factor=5000.0,
     plot=True,
+    show=True,
     cmap="viridis",
+    base="fixed",
+    kn=DEFAULT_KN,
+    kt_ratio=KT_RATIO,
+    sigma1_vlim=None,
 ):
+    """Analisis estatico lineal de la presa.
+
+    base : "fixed" (empotrada) o "robin" (resortes de Winkler con modulos
+           kn [N/m3] normal y kt = kt_ratio * kn tangencial).
+    """
+    if base not in ("fixed", "robin"):
+        raise ValueError("base debe ser 'fixed' o 'robin'")
+
     if mesh_file is None:
         mesh_file = "meshes/presa_q8_strain.mesh"
 
@@ -124,12 +176,22 @@ def run_dam_analysis(
     print("Momento de vuelco (origen)    : %14.2f N*m" % hydro_info["overturning_moment_origin"])
     print("Peso propio total Fy          : %14.2f N" % np.sum(system.F[1::2]))
 
-    # 4. Condiciones de borde: base fija (y=0 -> ux=0, uy=0)
-    fixed_nodes = system.fix_base(y_val=0.0)
+    # 4. Condiciones de borde en la base (y=0)
     print("\n--- CONDICIONES DE BORDE ---")
-    print("Nodos fijados en la base (y=0): %d nodos (%d DOFs restringidos)" % (
-        len(fixed_nodes), len(fixed_nodes) * 2
-    ))
+    if base == "fixed":
+        # Empotramiento: ux = 0, uy = 0
+        fixed_nodes = system.fix_base(y_val=0.0)
+        print("Base empotrada (y=0): %d nodos (%d DOFs restringidos)" % (
+            len(fixed_nodes), len(fixed_nodes) * 2
+        ))
+    else:
+        # Robin: t = -diag(kt, kn) u sobre la base
+        kt = kt_ratio * kn
+        robin_info = system.apply_robin_base(kn=kn, kt=kt, y_val=0.0)
+        print("Base sobre fundacion elastica (Robin): %d nodos, longitud %.4f m" % (
+            len(robin_info["nodes"]), robin_info["length"]
+        ))
+        print("  kn = %.3e N/m3 | kt = %.3e N/m3" % (kn, kt))
 
     # 5. Resolucion del sistema de ecuaciones (K u = F + R)
     u, reactions = system.solve(solver_func=LinearSolver.solve)
@@ -144,6 +206,8 @@ def run_dam_analysis(
     sum_ry = base_reactions["total_Ry"]
 
     print("\n--- REACCIONES EN LA BASE Y EQUILIBRIO GLOBAL ---")
+    if base == "robin":
+        print("(fuerzas de los resortes de la fundacion)")
     print("Reaccion horizontal total Rx  : %14.2f N" % sum_rx)
     print("Reaccion vertical total Ry    : %14.2f N" % sum_ry)
     print("Equilibrio horizontal sum(Fx)+Rx: %12.4e N" % (sum_fx + sum_rx))
@@ -167,7 +231,7 @@ def run_dam_analysis(
     sigma = np.array([element.stress_at_centroid(u) for element in elements])
     sigma_1 = np.array([elements[0].principal_stresses_3d(s)[0] for s in sigma])
 
-    print("\n--- TENSIONES POR ELEMENTO [MPa] (estado: %s) ---" % elements[0].material.plane_state)
+    print("\n--- TENSIONES POR ELEMENTO [MPa] (deformacion plana) ---")
     for label, values in (
         ("sigma_xx", sigma[:, 0]),
         ("sigma_yy", sigma[:, 1]),
@@ -178,44 +242,82 @@ def run_dam_analysis(
         print("%-13s min = %9.4f   max = %9.4f" % (label, values.min() / 1e6, values.max() / 1e6))
     print("=" * 70)
 
-    # 9. Visualizacion de configuracion deformada
+    # 9. Visualizacion: deformada y sigma_1 sobre la deformada
     if plot:
         base_name = os.path.splitext(os.path.basename(mesh_file))[0]
-        save_file = os.path.join("results", "deformada_%s.png" % base_name)
-        title = "Configuracion Deformada - Presa de Gravedad (%s orden %d)\nEscala: %g$\\times$ | Disp. max: %.4f mm" % (
-            mesh.element_types[0], mesh.element_orders[0], scale_factor, u_mag[max_idx] * 1000.0
+        element_label = "%s orden %d" % (mesh.element_types[0], mesh.element_orders[0])
+        if base == "fixed":
+            base_label = "base empotrada"
+            suffix = ""
+        else:
+            kn_str = ("%.0e" % kn).replace("+0", "").replace("+", "")   # 1e+09 -> 1e9
+            base_label = "base Robin $k_n$=%s N/m$^3$" % kn_str
+            suffix = "_robin_kn%s" % kn_str
+
+        title = "Configuracion Deformada - Presa de Gravedad (%s, %s)\nEscala: %g$\\times$ | Disp. max: %.4f mm" % (
+            element_label, base_label, scale_factor, u_mag[max_idx] * 1000.0
         )
         plot_deformed_mesh(
             mesh,
             u,
             scale_factor=scale_factor,
             title=title,
-            save_path=save_file,
-            show=True,
+            save_path=os.path.join("results", "deformada_%s%s.png" % (base_name, suffix)),
+            show=show,
             cmap=cmap,
+        )
+
+        title = "$\\sigma_1$ sobre la deformada (%s, %s)\nEscala: %g$\\times$ | $\\sigma_1$ promedio por elemento en [%.3f, %.3f] MPa" % (
+            element_label, base_label, scale_factor, sigma_1.min() / 1e6, sigma_1.max() / 1e6
+        )
+        plot_principal_stress(
+            mesh,
+            elements,
+            u,
+            scale_factor=scale_factor,
+            vlim=sigma1_vlim,
+            title=title,
+            save_path=os.path.join("results", "sigma1_%s%s.png" % (base_name, suffix)),
+            show=show,
         )
 
     return system
 
 
 if __name__ == "__main__":
-    # Permite pasar el tipo de elemento por argumento de consola:
-    # Ejemplo: python main.py CST 5000
+    # Permite pasar los parametros por consola:
+    #   python main.py <CST|LST|Q4|Q8|ALL|archivo.mesh> [escala] [fixed|robin] [kn]
     # O bien correr interactivamente si no se pasa ningun argumento.
     if len(sys.argv) > 1:
         arg = sys.argv[1].upper()
-        if arg in ELEMENT_MESHES:
-            selected_mesh = ELEMENT_MESHES[arg]
+        if arg == "ALL":
+            selected_meshes = list(ELEMENT_MESHES.values())
+        elif arg in ELEMENT_MESHES:
+            selected_meshes = [ELEMENT_MESHES[arg]]
         elif os.path.isfile(sys.argv[1]):
-            selected_mesh = sys.argv[1]
+            selected_meshes = [sys.argv[1]]
         else:
-            print("Argumento no reconocido: %s. Use CST, LST, Q4, Q8 o ruta al archivo .mesh" % sys.argv[1])
+            print("Argumento no reconocido: %s. Use CST, LST, Q4, Q8, ALL o ruta al archivo .mesh" % sys.argv[1])
             sys.exit(1)
 
         scale = float(sys.argv[2]) if len(sys.argv) > 2 else 5000.0
+        base = sys.argv[3].lower() if len(sys.argv) > 3 else "fixed"
+        if base not in ("fixed", "robin"):
+            print("Condicion de base no reconocida: %s. Use fixed o robin" % sys.argv[3])
+            sys.exit(1)
+        kn = float(sys.argv[4]) if len(sys.argv) > 4 else DEFAULT_KN
     else:
         element_choice = ask_element_choice()
-        selected_mesh = ELEMENT_MESHES[element_choice]
+        selected_meshes = [ELEMENT_MESHES[element_choice]]
         scale = ask_scale_factor()
+        base, kn = ask_base_condition()
 
-    run_dam_analysis(mesh_file=selected_mesh, scale_factor=scale, plot=True)
+    for selected_mesh in selected_meshes:
+        run_dam_analysis(
+            mesh_file=selected_mesh,
+            scale_factor=scale,
+            plot=True,
+            show=len(selected_meshes) == 1,
+            base=base,
+            kn=kn,
+        )
