@@ -26,6 +26,7 @@ from source.systems.system import System
 from source.solvers.linear_solver import LinearSolver
 from source.output.plotter import plot_deformed_mesh, plot_principal_stress
 from source.output.vtk_writer import write_vtu
+from source.output.stability import stability_report, print_stability_table
 
 
 ELEMENT_MESHES = {
@@ -125,6 +126,7 @@ def run_dam_analysis(
     kt_ratio=KT_RATIO,
     sigma1_vlim=None,
     export_vtu=True,
+    mu=0.7,
 ):
     """Analisis estatico lineal de la presa.
 
@@ -214,6 +216,13 @@ def run_dam_analysis(
     print("Reaccion vertical total Ry    : %14.2f N" % sum_ry)
     print("Equilibrio horizontal sum(Fx)+Rx: %12.4e N" % (sum_fx + sum_rx))
     print("Equilibrio vertical   sum(Fy)+Ry: %12.4e N" % (sum_fy + sum_ry))
+
+    # 6b. Tabla de estabilidad: momentos analiticos vs FEM y factores de seguridad
+    stability = stability_report(
+        system, water_height=water_height, gravity=gravity, mu=mu,
+    )
+    print()
+    print_stability_table(stability)
 
     # 7. Desplazamientos nodales maximos
     u_x = u[0::2]
