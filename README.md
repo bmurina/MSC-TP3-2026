@@ -89,3 +89,9 @@ python tests/test_presa_equilibrium.py
 Cada corrida de `main.py` guarda en `results/` la deformada coloreada por $|u|$
 (`deformada_*.png`) y la tensión principal máxima $\sigma_1$ 3D sobre la deformada
 (`sigma1_*.png`). `robin_analysis.py` agrega `robin_base_syy_*.png` con $\sigma_{yy}$ en la base.
+
+**Base sin tracción.** La presa se sostiene por peso propio, por lo que el suelo solo puede
+comprimirla. En todos los casos (empotrada, Robin y variaciones geométricas) se resuelve el sistema,
+se liberan por completo (sin $u_x$, $u_y$ ni resortes) los nodos de la base cuya reacción vertical
+es de tracción ($R_y < 0$) y se vuelve a resolver hasta que ningún nodo vinculado quede traccionado
+(`System.solve_without_base_tension`).

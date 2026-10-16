@@ -3,7 +3,9 @@
 Script principal de ejecucion del analisis estatico de la presa de gravedad.
 Modela el comportamiento mecanico 2D (deformacion plana) bajo peso propio y
 empuje hidroestatico. La base (y=0) puede estar empotrada (Dirichlet) o
-apoyada sobre una fundacion elastica de Winkler (condicion de Robin).
+apoyada sobre una fundacion elastica de Winkler (condicion de Robin). Como la
+presa se sostiene por peso propio, el suelo no puede traccionarla: los nodos
+de la base con reaccion de traccion se liberan y se vuelve a resolver.
 
 Permite seleccionar interactivamente el tipo de elemento (CST, LST, Q4, Q8),
 resolver el sistema y visualizar la configuracion deformada amplificada y la
@@ -25,6 +27,8 @@ from source.elements.factory import build_elements
 from source.systems.system import System
 from source.solvers.linear_solver import LinearSolver
 from source.output.plotter import plot_deformed_mesh, plot_principal_stress
+from source.output.vtk_writer import write_vtu
+from source.output.stability import stability_report, print_stability_table
 
 
 ELEMENT_MESHES = {
@@ -111,6 +115,21 @@ def ask_base_condition():
             print("Entrada invalida.")
 
 
+def print_released_nodes(system, release_info):
+    """Informa los nodos de la base liberados por estar traccionados."""
+    released = release_info["released"]
+    if not released:
+        print("Base sin traccion: no se libero ningun nodo.")
+        return
+    print("Nodos de la base liberados por traccion (%d, en %d iteraciones):" % (
+        len(released), release_info["iterations"]))
+    for node_id in released:
+        node = system.mesh.node(node_id)
+        print("  nodo %d (x=%.3f, y=%.3f)" % (node_id + 1, node.x, node.y))
+    for node_id in release_info["penetrating"]:
+        print("  AVISO: el nodo liberado %d penetra el suelo (uy < 0)" % (node_id + 1))
+
+
 def run_dam_analysis(
     mesh_file=None,
     water_height=28.0,
@@ -123,11 +142,16 @@ def run_dam_analysis(
     kn=DEFAULT_KN,
     kt_ratio=KT_RATIO,
     sigma1_vlim=None,
+    export_vtu=True,
+    mu=0.7,
+    release_tension=True,
 ):
     """Analisis estatico lineal de la presa.
 
     base : "fixed" (empotrada) o "robin" (resortes de Winkler con modulos
            kn [N/m3] normal y kt = kt_ratio * kn tangencial).
+    release_tension : si es True, los nodos de la base cuya reaccion es de
+           traccion quedan sin vinculo (libres) y se vuelve a resolver.
     """
     if base not in ("fixed", "robin"):
         raise ValueError("base debe ser 'fixed' o 'robin'")
@@ -194,8 +218,14 @@ def run_dam_analysis(
         print("  kn = %.3e N/m3 | kt = %.3e N/m3" % (kn, kt))
 
     # 5. Resolucion del sistema de ecuaciones (K u = F + R)
-    u, reactions = system.solve(solver_func=LinearSolver.solve)
+    # La presa se sostiene por peso propio: el suelo no puede traccionarla,
+    # asi que se liberan los nodos de la base con reaccion de traccion.
     print("\n--- RESOLUCION DEL SISTEMA ---")
+    if release_tension:
+        u, reactions, release_info = system.solve_without_base_tension(solver_func=LinearSolver.solve)
+        print_released_nodes(system, release_info)
+    else:
+        u, reactions = system.solve(solver_func=LinearSolver.solve)
     print("Sistema resuelto exitosamente.")
 
     # 6. Reacciones de vinculo y equilibrio estatico
@@ -212,6 +242,13 @@ def run_dam_analysis(
     print("Reaccion vertical total Ry    : %14.2f N" % sum_ry)
     print("Equilibrio horizontal sum(Fx)+Rx: %12.4e N" % (sum_fx + sum_rx))
     print("Equilibrio vertical   sum(Fy)+Ry: %12.4e N" % (sum_fy + sum_ry))
+
+    # 6b. Tabla de estabilidad: momentos analiticos vs FEM y factores de seguridad
+    stability = stability_report(
+        system, water_height=water_height, gravity=gravity, mu=mu,
+    )
+    print()
+    print_stability_table(stability)
 
     # 7. Desplazamientos nodales maximos
     u_x = u[0::2]
@@ -242,17 +279,27 @@ def run_dam_analysis(
         print("%-13s min = %9.4f   max = %9.4f" % (label, values.min() / 1e6, values.max() / 1e6))
     print("=" * 70)
 
-    # 9. Visualizacion: deformada y sigma_1 sobre la deformada
+    base_name = os.path.splitext(os.path.basename(mesh_file))[0]
+    if base == "fixed":
+        base_label = "base empotrada"
+        suffix = ""
+    else:
+        kn_str = ("%.0e" % kn).replace("+0", "").replace("+", "")   # 1e+09 -> 1e9
+        base_label = "base Robin $k_n$=%s N/m$^3$" % kn_str
+        suffix = "_robin_kn%s" % kn_str
+
+    # 9. Exportacion a VTU para ParaView (original + deformada amplificada)
+    if export_vtu:
+        vtu_path = os.path.join("results", "vtu", "%s%s.vtu" % (base_name, suffix))
+        vtu_def_path = os.path.join("results", "vtu", "%s%s_deformada.vtu" % (base_name, suffix))
+        write_vtu(vtu_path, mesh, elements, u, scale_factor=0.0)
+        write_vtu(vtu_def_path, mesh, elements, u, scale_factor=scale_factor)
+        print("VTU guardado en: %s" % vtu_path)
+        print("VTU deformada (x%g) guardado en: %s" % (scale_factor, vtu_def_path))
+
+    # 10. Visualizacion: deformada y sigma_1 sobre la deformada
     if plot:
-        base_name = os.path.splitext(os.path.basename(mesh_file))[0]
         element_label = "%s orden %d" % (mesh.element_types[0], mesh.element_orders[0])
-        if base == "fixed":
-            base_label = "base empotrada"
-            suffix = ""
-        else:
-            kn_str = ("%.0e" % kn).replace("+0", "").replace("+", "")   # 1e+09 -> 1e9
-            base_label = "base Robin $k_n$=%s N/m$^3$" % kn_str
-            suffix = "_robin_kn%s" % kn_str
 
         title = "Configuracion Deformada - Presa de Gravedad (%s, %s)\nEscala: %g$\\times$ | Disp. max: %.4f mm" % (
             element_label, base_label, scale_factor, u_mag[max_idx] * 1000.0

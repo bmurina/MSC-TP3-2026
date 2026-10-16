@@ -35,6 +35,11 @@ class BoundaryConditions:
                 fixed_nodes.append(node.global_id)
         return fixed_nodes
 
+    def release_node(self, mesh, node_id):
+        """Quita todas las restricciones del nodo (queda libre en ux y uy)."""
+        for dof in mesh.node_global_dofs(node_id):
+            self.prescribed_dofs.pop(dof, None)
+
     def get_fixed_dofs(self):
         """Devuelve una lista ordenada de los DOFs restringidos."""
         return sorted(self.prescribed_dofs.keys())

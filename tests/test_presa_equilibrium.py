@@ -111,7 +111,37 @@ def test_robin_stiff_limit():
         assert rel_err < 1e-2, "Robin rigido no converge al empotramiento"
 
 
+def test_base_without_tension():
+    """Al liberar los nodos traccionados la base queda solo comprimida y se
+    mantiene el equilibrio (empotrada y Robin)."""
+    for mesh_path in MESHES:
+        for base, kn in (("fixed", None), ("robin", 1.0e10)):
+            mesh = Mesh()
+            mesh.read(mesh_path)
+            fem_sys = System(mesh, build_elements(mesh))
+            fem_sys.assemble_stiffness()
+            fem_sys.apply_hydrostatic_pressure(water_height=28.0, rho_water=1000.0, gravity=9.81)
+            fem_sys.apply_gravity(gravity=9.81)
+            if base == "fixed":
+                fem_sys.fix_base(y_val=0.0)
+            else:
+                fem_sys.apply_robin_base(kn=kn, kt=0.4 * kn, y_val=0.0)
+
+            _, _, info = fem_sys.solve_without_base_tension(solver_func=LinearSolver.solve)
+            base_info = fem_sys.get_base_reactions(y_val=0.0)
+
+            min_ry = min(n["Ry"] for n in base_info["nodes"])
+            eq_x = abs(np.sum(fem_sys.F[0::2]) + base_info["total_Rx"])
+            eq_y = abs(np.sum(fem_sys.F[1::2]) + base_info["total_Ry"])
+
+            print("%s | %s | liberados: %s | min Ry: %.3e N" % (mesh_path, base, info["released"], min_ry))
+            assert min_ry > -1e-3, "Quedan nodos traccionados en la base"
+            assert not info["penetrating"], "Un nodo liberado penetra el suelo"
+            assert eq_x < 1e-4 and eq_y < 1e-4, "Error de equilibrio sin traccion"
+
+
 if __name__ == "__main__":
     test_presa_equilibrium()
     test_presa_robin_equilibrium()
     test_robin_stiff_limit()
+    test_base_without_tension()

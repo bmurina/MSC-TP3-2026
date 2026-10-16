@@ -24,6 +24,7 @@ class System:
         self.K = DenseMatrix(self.number_of_dofs)
         self.Ks = DenseMatrix(self.number_of_dofs)   # rigidez de resortes (Robin)
         self.has_springs = False
+        self.released_nodes = set()   # nodos de la base liberados por traccion
         self.F = numpy.zeros(self.number_of_dofs, dtype=float)
         self.bc = BoundaryConditions(self.number_of_dofs)
 
@@ -141,6 +142,55 @@ class System:
 
         self.has_springs = True
         return {"nodes": sorted(base_nodes), "length": total_length}
+
+    def release_base_node(self, node_id):
+        """Libera un nodo de la base: quita sus DOFs prescriptos (empotramiento)
+        y sus resortes de Robin (filas y columnas de Ks), de modo que queda
+        libre de desplazarse."""
+        self.bc.release_node(self.mesh, node_id)
+        dofs = self.mesh.node_global_dofs(node_id)
+        self.Ks[dofs, :] = 0.0
+        self.Ks[:, dofs] = 0.0
+        self.released_nodes.add(node_id)
+
+    def solve_without_base_tension(self, solver_func=None, y_val=0.0, tol=1e-5, max_iter=50):
+        """Resuelve el sistema sin admitir traccion en la base.
+
+        La presa se apoya por peso propio: el suelo solo puede comprimirla.
+        Tras cada resolucion se liberan los nodos de la base cuya reaccion
+        vertical es de traccion (Ry < 0, el suelo tira de la presa hacia
+        abajo) y se vuelve a resolver, hasta que ningun nodo vinculado quede
+        traccionado (al liberar nodos la traccion puede migrar a vecinos).
+
+        Devuelve
+        --------
+        u, reactions : como solve()
+        info : dict con 'released' (ids de nodos liberados, en orden),
+               'iterations' y 'penetrating' (nodos liberados con uy < 0).
+        """
+        released = []
+        for iteration in range(1, max_iter + 1):
+            u, reactions = self.solve(solver_func=solver_func)
+            base = self.get_base_reactions(y_val=y_val, tol=tol)
+            force_tol = 1e-9 * max(abs(base["total_Ry"]), 1.0)
+
+            tensile = [n["node_id"] for n in base["nodes"]
+                       if n["node_id"] not in self.released_nodes and n["Ry"] < -force_tol]
+            if not tensile:
+                break
+            for node_id in tensile:
+                self.release_base_node(node_id)
+            released.extend(tensile)
+        else:
+            raise RuntimeError("No se elimino la traccion en la base en %d iteraciones" % max_iter)
+
+        if not self.bc.get_fixed_dofs() and not numpy.any(self.Ks.to_numpy()):
+            raise RuntimeError("Se liberaron todos los vinculos de la base (presa sin apoyo).")
+
+        # Un nodo liberado con uy < 0 penetraria el suelo (deberia volver a apoyarse)
+        penetrating = [n for n in released if u[self.mesh.node_global_dofs(n)[1]] < 0.0]
+
+        return u, reactions, {"released": released, "iterations": iteration, "penetrating": penetrating}
 
     def solve(self, solver_func=None):
         """Resuelve el sistema estatico lineal (K + Ks) u = F con condiciones de
