@@ -165,7 +165,8 @@ def analyze_geometry(
     system.apply_gravity(gravity=9.81)
     system.fix_base(y_val=0.0)
 
-    u, reactions = system.solve(solver_func=LinearSolver.solve)
+    # Sin traccion en la base: se liberan los nodos traccionados
+    u, reactions, release_info = system.solve_without_base_tension(solver_func=LinearSolver.solve)
 
     # Estabilidad
     stability = stability_report(
@@ -206,6 +207,8 @@ def analyze_geometry(
         print(" ANALISIS PARAMETRICO: BASE B = %.2f m | CRESTA b = %.2f m" % (base_width, crest_width))
         print("=" * 80)
         print("Malla: %s (15 elementos Q8, 62 nodos)" % mesh_file)
+        print("Nodos de la base liberados por traccion: %s" % (
+            ", ".join("%d (x=%.2f)" % (n + 1, mesh.node(n).x) for n in release_info["released"]) or "ninguno"))
         print_stability_table(stability)
         print("Desplazamiento maximo en coronamiento: %8.4f mm" % max_u_mm)
         print("Tension principal maxima sigma_1      : %8.4f MPa" % max_sigma1_mpa)
@@ -259,6 +262,7 @@ def analyze_geometry(
         "x_resultant": stability["x_resultant"],
         "eccentricity": stability["eccentricity"],
         "in_kern": stability["in_kern"],
+        "released_nodes": release_info["released"],
         "mesh_file": mesh_file,
     }
 
@@ -341,7 +345,10 @@ def run_sweep_study(mu=0.7):
         f.write("   - Aumentar la cresta (de 3 a 4,5 o 6 m) agrega peso en la parte superior. Esto mejora ligeramente el deslizamiento, pero su contribución al momento estabilizante es menos eficiente por metro cúbico de hormigón debido a que el brazo de palanca relativo al pie aguas abajo crece poco en comparación con ensanchar la base.\n\n")
         f.write("3. **Geometría Óptima Recomendada: $B = 22\\text{ m}, b = 4\\text{ m}$**:\n")
         f.write("   - Logra un $FS_{\\text{vuelco}} = 3{,}47$ y un $FS_{\\text{desl}} = 1{,}67 > 1{,}50$ (superando el umbral normativo habitual para deslizamiento con $\\mu=0{,}7$).\n")
-        f.write("   - Reduce los desplazamientos en cresta de $0{,}69\\text{ mm}$ a $0{,}51\\text{ mm}$ (-26%) manteniendo un uso racional de volumen de hormigón.\n")
+        u_base = next(r["max_u_mm"] for r in results if r["base"] == 18.0 and r["crest"] == 3.0)
+        u_opt = next(r["max_u_mm"] for r in results if "Optima" in r["desc"])
+        f.write("   - Reduce los desplazamientos en cresta de $%s\\text{ mm}$ a $%s\\text{ mm}$ (%+.0f%%) manteniendo un uso racional de volumen de hormigón.\n" % (
+            ("%.2f" % u_base).replace(".", "{,}"), ("%.2f" % u_opt).replace(".", "{,}"), 100.0 * (u_opt / u_base - 1.0)))
 
     print("\nReporte guardado en: %s" % report_path)
     print("Mallas generadas guardadas en: %s/" % MESH_DIR)

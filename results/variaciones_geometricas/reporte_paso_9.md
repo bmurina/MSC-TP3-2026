@@ -7,15 +7,15 @@ Todas las geometrías fueron malladas de forma automática con **15 elementos cu
 
 | Configuración | $B$ [m] | $b$ [m] | Área [m²] | Peso [MN/m] | $M_{\text{est}}$ [MN·m/m] | $FS_{\text{vuelco}}$ | $FS_{\text{desl}}$ ($\mu=0{,}7$) | $u_{\text{max}}$ [mm] | $\sigma_1^{\text{max}}$ [MPa] |
 |---|---|---|---|---|---|---|---|---|---|
-| Base reducida (B=15m) | 15.0 | 3.0 | 270.0 | 6.36 | 62.51 | **1.742** | **1.157** | 1.270 | 0.059 |
-| Caso Base Oficial (B=18m, b=3m) | 18.0 | 3.0 | 315.0 | 7.42 | 87.94 | **2.450** | **1.350** | 0.692 | 0.001 |
-| Base ensanchada (B=20m) | 20.0 | 3.0 | 345.0 | 8.12 | 107.24 | **2.988** | **1.479** | 0.499 | 0.000 |
-| Base ensanchada (B=22m) | 22.0 | 3.0 | 375.0 | 8.83 | 128.43 | **3.578** | **1.607** | 0.403 | 0.000 |
+| Base reducida (B=15m) | 15.0 | 3.0 | 270.0 | 6.36 | 62.51 | **1.742** | **1.157** | 1.449 | 0.002 |
+| Caso Base Oficial (B=18m, b=3m) | 18.0 | 3.0 | 315.0 | 7.42 | 87.94 | **2.450** | **1.350** | 0.738 | 0.000 |
+| Base ensanchada (B=20m) | 20.0 | 3.0 | 345.0 | 8.12 | 107.24 | **2.988** | **1.479** | 0.522 | 0.000 |
+| Base ensanchada (B=22m) | 22.0 | 3.0 | 375.0 | 8.83 | 128.43 | **3.578** | **1.607** | 0.409 | 0.000 |
 | Base ensanchada (B=25m) | 25.0 | 3.0 | 420.0 | 9.89 | 163.75 | **4.562** | **1.800** | 0.357 | 0.000 |
-| Cresta reducida (b=2m) | 18.0 | 2.0 | 300.0 | 7.06 | 84.29 | **2.348** | **1.286** | 0.755 | 0.001 |
-| Cresta engrosada (b=4.5m) | 18.0 | 4.5 | 337.5 | 7.95 | 92.97 | **2.590** | **1.446** | 0.642 | 0.000 |
-| Cresta engrosada (b=6m) | 18.0 | 6.0 | 360.0 | 8.48 | 97.47 | **2.716** | **1.543** | 0.627 | -0.000 |
-| **Geometria Optima Recomendada (B=22m, b=4m)** | 22.0 | 4.0 | 390.0 | 9.18 | 132.79 | **3.700** | **1.671** | 0.399 | 0.000 |
+| Cresta reducida (b=2m) | 18.0 | 2.0 | 300.0 | 7.06 | 84.29 | **2.348** | **1.286** | 0.809 | 0.001 |
+| Cresta engrosada (b=4.5m) | 18.0 | 4.5 | 337.5 | 7.95 | 92.97 | **2.590** | **1.446** | 0.679 | 0.000 |
+| Cresta engrosada (b=6m) | 18.0 | 6.0 | 360.0 | 8.48 | 97.47 | **2.716** | **1.543** | 0.658 | -0.000 |
+| **Geometria Optima Recomendada (B=22m, b=4m)** | 22.0 | 4.0 | 390.0 | 9.18 | 132.79 | **3.700** | **1.671** | 0.402 | 0.000 |
 
 ## Conclusiones del Estudio y Justificación de la Geometría Óptima
 
@@ -29,4 +29,4 @@ Todas las geometrías fueron malladas de forma automática con **15 elementos cu
 
 3. **Geometría Óptima Recomendada: $B = 22\text{ m}, b = 4\text{ m}$**:
    - Logra un $FS_{\text{vuelco}} = 3{,}47$ y un $FS_{\text{desl}} = 1{,}67 > 1{,}50$ (superando el umbral normativo habitual para deslizamiento con $\mu=0{,}7$).
-   - Reduce los desplazamientos en cresta de $0{,}69\text{ mm}$ a $0{,}51\text{ mm}$ (-26%) manteniendo un uso racional de volumen de hormigón.
+   - Reduce los desplazamientos en cresta de $0{,}74\text{ mm}$ a $0{,}40\text{ mm}$ (-46%) manteniendo un uso racional de volumen de hormigón.

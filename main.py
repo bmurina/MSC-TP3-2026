@@ -3,7 +3,9 @@
 Script principal de ejecucion del analisis estatico de la presa de gravedad.
 Modela el comportamiento mecanico 2D (deformacion plana) bajo peso propio y
 empuje hidroestatico. La base (y=0) puede estar empotrada (Dirichlet) o
-apoyada sobre una fundacion elastica de Winkler (condicion de Robin).
+apoyada sobre una fundacion elastica de Winkler (condicion de Robin). Como la
+presa se sostiene por peso propio, el suelo no puede traccionarla: los nodos
+de la base con reaccion de traccion se liberan y se vuelve a resolver.
 
 Permite seleccionar interactivamente el tipo de elemento (CST, LST, Q4, Q8),
 resolver el sistema y visualizar la configuracion deformada amplificada y la
@@ -113,6 +115,21 @@ def ask_base_condition():
             print("Entrada invalida.")
 
 
+def print_released_nodes(system, release_info):
+    """Informa los nodos de la base liberados por estar traccionados."""
+    released = release_info["released"]
+    if not released:
+        print("Base sin traccion: no se libero ningun nodo.")
+        return
+    print("Nodos de la base liberados por traccion (%d, en %d iteraciones):" % (
+        len(released), release_info["iterations"]))
+    for node_id in released:
+        node = system.mesh.node(node_id)
+        print("  nodo %d (x=%.3f, y=%.3f)" % (node_id + 1, node.x, node.y))
+    for node_id in release_info["penetrating"]:
+        print("  AVISO: el nodo liberado %d penetra el suelo (uy < 0)" % (node_id + 1))
+
+
 def run_dam_analysis(
     mesh_file=None,
     water_height=28.0,
@@ -127,11 +144,14 @@ def run_dam_analysis(
     sigma1_vlim=None,
     export_vtu=True,
     mu=0.7,
+    release_tension=True,
 ):
     """Analisis estatico lineal de la presa.
 
     base : "fixed" (empotrada) o "robin" (resortes de Winkler con modulos
            kn [N/m3] normal y kt = kt_ratio * kn tangencial).
+    release_tension : si es True, los nodos de la base cuya reaccion es de
+           traccion quedan sin vinculo (libres) y se vuelve a resolver.
     """
     if base not in ("fixed", "robin"):
         raise ValueError("base debe ser 'fixed' o 'robin'")
@@ -198,8 +218,14 @@ def run_dam_analysis(
         print("  kn = %.3e N/m3 | kt = %.3e N/m3" % (kn, kt))
 
     # 5. Resolucion del sistema de ecuaciones (K u = F + R)
-    u, reactions = system.solve(solver_func=LinearSolver.solve)
+    # La presa se sostiene por peso propio: el suelo no puede traccionarla,
+    # asi que se liberan los nodos de la base con reaccion de traccion.
     print("\n--- RESOLUCION DEL SISTEMA ---")
+    if release_tension:
+        u, reactions, release_info = system.solve_without_base_tension(solver_func=LinearSolver.solve)
+        print_released_nodes(system, release_info)
+    else:
+        u, reactions = system.solve(solver_func=LinearSolver.solve)
     print("Sistema resuelto exitosamente.")
 
     # 6. Reacciones de vinculo y equilibrio estatico
